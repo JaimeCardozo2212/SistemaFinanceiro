@@ -88,8 +88,21 @@ def salvar_dados_sheets(df, aba_nome):
 
 # --- LOGIN ---
 def verificar_login(email, senha):
-    if email in CREDENCIAIS and CREDENCIAIS[email] == senha:
-        return True
+    """Verifica se o email e a senha (limpos de espaços) correspondem."""
+    
+    email_limpo = email.strip() # Remove espaços do email que o usuário digitou
+    senha_limpa = senha.strip() # Remove espaços da senha que o usuário digitou
+    
+    # 1. Checa se o e-mail (limpo) existe no dicionário
+    if email_limpo in CREDENCIAIS:
+        
+        # 2. Pega a senha do Secret, converte para string e remove espaços invisíveis
+        senha_secreta_limpa = str(CREDENCIAIS[email_limpo]).strip() 
+        
+        # 3. Compara as senhas limpas
+        if senha_secreta_limpa == senha_limpa:
+            return True
+            
     return False
 
 def tela_login():
