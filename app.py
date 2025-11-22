@@ -6,6 +6,7 @@ from datetime import date
 import os
 import json
 from streamlit_cookies import CookieManager # NOVO IMPORT
+from datetime import date, timedelta # Adicione timedelta aqui
 
 # --- Configurações da Página ---
 st.set_page_config(page_title="Controle Financeiro", page_icon="💰", layout="wide")
@@ -124,10 +125,10 @@ def tela_login():
                     st.session_state["logado"] = True
                     st.session_state["usuario_atual"] = email_input.strip()
                     
-                    # NOVO: Se marcou "Lembrar-me", salva o email no cookie
+                    # CORREÇÃO APLICADA AQUI: Usa timedelta
                     if lembrar_me:
-                        # Expira em 30 dias
-                        cookie_manager.set(COOKIE_USER_KEY, email_input.strip(), expires_at=date.today().day + 30)
+                        data_expiracao = date.today() + timedelta(days=30)
+                        cookie_manager.set(COOKIE_USER_KEY, email_input.strip(), expires_at=data_expiracao)
                         
                     st.rerun()
                 else:
