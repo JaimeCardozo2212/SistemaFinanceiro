@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import date, timedelta, datetime # Importe o objeto datetime
+from datetime import date, timedelta, datetime, timezone # Adicione timezone
 import os
 import json
 from streamlit_cookies import CookieManager 
@@ -150,15 +150,25 @@ def tela_login():
                     # ... (código de login bem-sucedido) ...
                     
                     if lembrar_me:
-                        # 1. Calcula a data de hoje + 30 dias (data pura)
-                        data_limite_date = date.today() + timedelta(days=30)
+                        # 1. Cria o datetime ciente do fuso horário UTC (requisito do cookie)
+                        # data_expiracao = datetime.now(timezone.utc) + timedelta(days=30)
                         
-                        # 2. CONVERTE A DATA PURA PARA DATETIME (com hora zero)
+                        # ALTERNATIVA MAIS SIMPLES: Usar .isoformat() no objeto ingênuo
+                        # A biblioteca streamlit-cookies tem um bug conhecido com objetos datetime
+                        # Vamos tentar definir o cookie como string, que é mais robusto:
+                        
+                        data_limite_date = date.today() + timedelta(days=30)
                         data_expiracao_datetime = datetime.combine(data_limite_date, datetime.min.time())
                         
-                        # 3. Usa o objeto datetime completo para o cookie
-                        cookie_manager.set(COOKIE_USER_KEY, email_input.strip(), expires_at=data_expiracao_datetime)
-                        
+                        # Tenta a correção do fuso horário
+                        try:
+                            # Cria um datetime ciente do fuso horário UTC e adiciona 30 dias
+                            data_expiracao_aware = datetime.now(timezone.utc) + timedelta(days=30)
+                            cookie_manager.set(COOKIE_USER_KEY, email_input.strip(), expires_at=data_expiracao_aware)
+                        except TypeError:
+                            # Se a versão aware falhar, tenta passar como string ISO (ÚLTIMO RECURSO)
+                            cookie_manager.set(COOKIE_USER_KEY, email_input.strip(), expires_at=data_expiracao_datetime.isoformat())
+                            
                     st.rerun()
                 else:
                     st.error("Dados incorretos.")
