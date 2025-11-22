@@ -2,11 +2,10 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import date
+from datetime import date, timedelta # Corrigido: timedelta adicionado aqui
 import os
 import json
-from streamlit_cookies import CookieManager # NOVO IMPORT
-from datetime import date, timedelta # Adicione timedelta aqui
+from streamlit_cookies import CookieManager 
 
 # --- Configurações da Página ---
 st.set_page_config(page_title="Controle Financeiro", page_icon="💰", layout="wide")
@@ -14,7 +13,7 @@ st.set_page_config(page_title="Controle Financeiro", page_icon="💰", layout="w
 # --- CONFIGURAÇÕES CRÍTICAS ---
 NOME_PLANILHA_GOOGLE = "Controle Financeiro App" 
 ARQUIVO_CREDENCIAIS = "credentials.json"
-COOKIE_USER_KEY = "finance_app_user" # Chave do cookie para armazenar o email
+COOKIE_USER_KEY = "finance_app_user" 
 
 # Inicializa o gerenciador de cookies
 cookie_manager = CookieManager()
@@ -83,6 +82,33 @@ def salvar_dados_sheets(df, aba_nome):
     except Exception as e:
         st.error(f"Erro ao salvar no Google Sheets: {e}")
         return False
+        
+# --------------------------------------------------------
+# MOVIDO AQUI: FUNÇÕES DE DADOS (Devido à dependência de ordem)
+# --------------------------------------------------------
+def obter_despesas():
+    df = carregar_dados_sheets("Despesas")
+    if df.empty or 'Data' not in df.columns:
+        return pd.DataFrame(columns=["Data", "Categoria", "Descrição", "Valor"])
+    
+    try:
+        df["Data"] = pd.to_datetime(df["Data"], errors='coerce').dt.date
+        df["Valor"] = pd.to_numeric(df["Valor"], errors='coerce').fillna(0.0)
+    except Exception as e:
+        st.warning(f"Erro ao converter tipos de dados (Data/Valor) na planilha. Verifique as colunas. Erro: {e}")
+        return pd.DataFrame(columns=["Data", "Categoria", "Descrição", "Valor"])
+        
+    return df
+
+def obter_categorias():
+    df = carregar_dados_sheets("Categorias")
+    if df.empty or 'Categoria' not in df.columns:
+        padrao = ["Alimentação", "Transporte", "Moradia", "Lazer", "Educação", "Saúde", "Outros"]
+        df_padrao = pd.DataFrame(padrao, columns=["Categoria"])
+        salvar_dados_sheets(df_padrao, "Categorias")
+        return padrao
+    return df["Categoria"].tolist()
+# --------------------------------------------------------
 
 
 # --- CONFIGURAÇÃO DE LOGIN (LENDO DOS SECRETS) ---
@@ -106,7 +132,7 @@ def verificar_login(email, senha):
     return False
 
 # ========================================================
-# TELA DE LOGIN, ESTADO E LÓGICA DE COOKIES (NOVO)
+# TELA DE LOGIN, ESTADO E LÓGICA DE COOKIES
 # ========================================================
 
 def tela_login():
@@ -117,7 +143,6 @@ def tela_login():
             email_input = st.text_input("E-mail")
             senha_input = st.text_input("Senha", type="password")
             
-            # NOVO: Checkbox "Lembrar-me"
             lembrar_me = st.checkbox("Lembrar-me por 30 dias")
             
             if st.form_submit_button("Entrar"):
@@ -125,7 +150,6 @@ def tela_login():
                     st.session_state["logado"] = True
                     st.session_state["usuario_atual"] = email_input.strip()
                     
-                    # CORREÇÃO APLICADA AQUI: Usa timedelta
                     if lembrar_me:
                         data_expiracao = date.today() + timedelta(days=30)
                         cookie_manager.set(COOKIE_USER_KEY, email_input.strip(), expires_at=data_expiracao)
@@ -135,23 +159,18 @@ def tela_login():
                     st.error("Dados incorretos.")
 
 # --- Lógica de Inicialização de Sessão ---
-
-# 1. Tenta carregar o estado do cookie
 user_cookie = cookie_manager.get(COOKIE_USER_KEY)
 
 if "logado" not in st.session_state:
     st.session_state["logado"] = False
     
-# 2. Se a sessão não está logada E achamos um cookie:
 if not st.session_state["logado"] and user_cookie:
-    # Verifica se o email do cookie ainda é um usuário válido nos Secrets
     if user_cookie.strip() in CREDENCIAIS:
         st.session_state["logado"] = True
         st.session_state["usuario_atual"] = user_cookie.strip()
         st.success(f"Bem-vindo(a) de volta, {user_cookie}!")
-        st.rerun() # Recarrega para pular o login
+        st.rerun() 
 
-# 3. Se não está logado (e não tem cookie), mostra a tela de login
 if not st.session_state["logado"]:
     tela_login()
     st.stop()
@@ -164,22 +183,17 @@ if not st.session_state["logado"]:
 # --- Interface ---
 st.sidebar.success(f"👤 {st.session_state['usuario_atual']}")
 
-# NOVO: Botão Sair também deleta o cookie
 if st.sidebar.button("Sair"):
     st.session_state["logado"] = False
     st.session_state["usuario_atual"] = ""
-    # Deleta o cookie
     cookie_manager.delete(COOKIE_USER_KEY)
     st.rerun()
 
 st.title("💰 Finanças no Google Sheets")
 
-# Carregamento inicial (restante do app)
+# ESTAS CHAMADAS AGORA FUNCIONAM PORQUE AS FUNÇÕES ESTÃO DEFINIDAS ACIMA
 df_despesas = obter_despesas()
 lista_categorias = obter_categorias()
-
-# ... (O restante da sua lógica de gerenciamento de categorias, despesas, gráficos e edição) ...
-# O restante do código abaixo é o mesmo que você já tem, garantindo que tudo funcione
 
 # --- Adicionar Nova Categoria ---
 with st.sidebar.expander("➕ Gerenciar Categorias"):
