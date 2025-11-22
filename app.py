@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import date, timedelta, datetime, timezone # Adicione timezone
+from datetime import date # Removido o import de timedelta e datetime
 import os
 import json
-from streamlit_cookies import CookieManager 
+# Removido o import: from streamlit_cookies import CookieManager
 
 # --- Configurações da Página ---
 st.set_page_config(page_title="Controle Financeiro", page_icon="💰", layout="wide")
@@ -13,10 +13,9 @@ st.set_page_config(page_title="Controle Financeiro", page_icon="💰", layout="w
 # --- CONFIGURAÇÕES CRÍTICAS ---
 NOME_PLANILHA_GOOGLE = "Controle Financeiro App" 
 ARQUIVO_CREDENCIAIS = "credentials.json"
-COOKIE_USER_KEY = "finance_app_user" 
+# Removido o COOKIE_USER_KEY
 
-# Inicializa o gerenciador de cookies
-cookie_manager = CookieManager()
+# Removido: cookie_manager = CookieManager()
 
 
 # ========================================================
@@ -84,7 +83,7 @@ def salvar_dados_sheets(df, aba_nome):
         return False
         
 # --------------------------------------------------------
-# MOVIDO AQUI: FUNÇÕES DE DADOS (Devido à dependência de ordem)
+# FUNÇÕES DE DADOS (Obter despesas e categorias)
 # --------------------------------------------------------
 def obter_despesas():
     df = carregar_dados_sheets("Despesas")
@@ -132,7 +131,7 @@ def verificar_login(email, senha):
     return False
 
 # ========================================================
-# TELA DE LOGIN, ESTADO E LÓGICA DE COOKIES
+# TELA DE LOGIN E ESTADO (VERSÃO SEM COOKIE)
 # ========================================================
 
 def tela_login():
@@ -143,49 +142,25 @@ def tela_login():
             email_input = st.text_input("E-mail")
             senha_input = st.text_input("Senha", type="password")
             
-            lembrar_me = st.checkbox("Lembrar-me por 30 dias")
+            # Removido: Checkbox "Lembrar-me"
             
             if st.form_submit_button("Entrar"):
                 if verificar_login(email_input, senha_input):
-                    # ... (código de login bem-sucedido) ...
+                    st.session_state["logado"] = True
+                    st.session_state["usuario_atual"] = email_input.strip()
                     
-                    if lembrar_me:
-                        # 1. Cria o datetime ciente do fuso horário UTC (requisito do cookie)
-                        # data_expiracao = datetime.now(timezone.utc) + timedelta(days=30)
+                    # Removida a lógica de setar cookie
                         
-                        # ALTERNATIVA MAIS SIMPLES: Usar .isoformat() no objeto ingênuo
-                        # A biblioteca streamlit-cookies tem um bug conhecido com objetos datetime
-                        # Vamos tentar definir o cookie como string, que é mais robusto:
-                        
-                        data_limite_date = date.today() + timedelta(days=30)
-                        data_expiracao_datetime = datetime.combine(data_limite_date, datetime.min.time())
-                        
-                        # Tenta a correção do fuso horário
-                        try:
-                            # Cria um datetime ciente do fuso horário UTC e adiciona 30 dias
-                            data_expiracao_aware = datetime.now(timezone.utc) + timedelta(days=30)
-                            cookie_manager.set(COOKIE_USER_KEY, email_input.strip(), expires_at=data_expiracao_aware)
-                        except TypeError:
-                            # Se a versão aware falhar, tenta passar como string ISO (ÚLTIMO RECURSO)
-                            cookie_manager.set(COOKIE_USER_KEY, email_input.strip(), expires_at=data_expiracao_datetime.isoformat())
-                            
                     st.rerun()
                 else:
                     st.error("Dados incorretos.")
 
 # --- Lógica de Inicialização de Sessão ---
-user_cookie = cookie_manager.get(COOKIE_USER_KEY)
-
+# Removida a verificação de cookie no início
 if "logado" not in st.session_state:
     st.session_state["logado"] = False
     
-if not st.session_state["logado"] and user_cookie:
-    if user_cookie.strip() in CREDENCIAIS:
-        st.session_state["logado"] = True
-        st.session_state["usuario_atual"] = user_cookie.strip()
-        st.success(f"Bem-vindo(a) de volta, {user_cookie}!")
-        st.rerun() 
-
+# Se não está logado, mostra a tela de login
 if not st.session_state["logado"]:
     tela_login()
     st.stop()
@@ -201,12 +176,12 @@ st.sidebar.success(f"👤 {st.session_state['usuario_atual']}")
 if st.sidebar.button("Sair"):
     st.session_state["logado"] = False
     st.session_state["usuario_atual"] = ""
-    cookie_manager.delete(COOKIE_USER_KEY)
+    # Removida a lógica de deletar cookie
     st.rerun()
 
 st.title("💰 Finanças no Google Sheets")
 
-# ESTAS CHAMADAS AGORA FUNCIONAM PORQUE AS FUNÇÕES ESTÃO DEFINIDAS ACIMA
+# Carregamento inicial (após login)
 df_despesas = obter_despesas()
 lista_categorias = obter_categorias()
 
