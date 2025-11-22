@@ -13,12 +13,6 @@ st.set_page_config(page_title="Controle Financeiro", page_icon="💰", layout="w
 NOME_PLANILHA_GOOGLE = "Controle Financeiro App"
 ARQUIVO_CREDENCIAIS = "credentials.json"
 
-# --- CONFIGURAÇÃO DE LOGIN ---
-CREDENCIAIS = {
-    "angebergui@gmail.com": "123456",
-    "jaimecardozo.junior@gmail.com": "123456"
-}
-
 # --- FUNÇÕES DE CONEXÃO (CORRIGIDA) ---
 @st.cache_resource
 def conectar_google_sheets():
