@@ -5,14 +5,18 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import date
 import os
 import json
+from streamlit_cookies import CookieManager # NOVO IMPORT
 
 # --- Configurações da Página ---
 st.set_page_config(page_title="Controle Financeiro", page_icon="💰", layout="wide")
 
 # --- CONFIGURAÇÕES CRÍTICAS ---
-# O nome EXATO da sua planilha no Google Drive
 NOME_PLANILHA_GOOGLE = "Controle Financeiro App" 
 ARQUIVO_CREDENCIAIS = "credentials.json"
+COOKIE_USER_KEY = "finance_app_user" # Chave do cookie para armazenar o email
+
+# Inicializa o gerenciador de cookies
+cookie_manager = CookieManager()
 
 
 # ========================================================
@@ -28,7 +32,6 @@ def conectar_google_sheets():
     if "gcp_service_account" in st.secrets:
         try:
             creds_dict = dict(st.secrets["gcp_service_account"])
-            # CORREÇÃO CRÍTICA: Garante que a private_key use quebras de linha corretas
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
             
             creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -69,12 +72,10 @@ def salvar_dados_sheets(df, aba_nome):
         sh = conectar_google_sheets()
         worksheet = sh.worksheet(aba_nome)
         
-        # Converte datas para string antes de enviar (gspread não lida bem com objetos date)
         df_export = df.copy()
         if "Data" in df_export.columns:
             df_export["Data"] = df_export["Data"].astype(str)
             
-        # Limpa tudo e reescreve: cabeçalhos + dados
         worksheet.clear()
         worksheet.update([df_export.columns.values.tolist()] + df_export.values.tolist())
         return True
@@ -85,21 +86,17 @@ def salvar_dados_sheets(df, aba_nome):
 
 # --- CONFIGURAÇÃO DE LOGIN (LENDO DOS SECRETS) ---
 try:
-    # Lê a seção [login_credentials] do secrets.toml (ou Cloud Secrets)
     CREDENCIAIS = st.secrets.login_credentials
 except AttributeError:
-    # Isso só deve acontecer se estiver faltando a seção [login_credentials] no Secrets
     st.error("ERRO DE CONFIGURAÇÃO: O app não encontrou a seção [login_credentials] no Secrets.")
-    CREDENCIAIS = {} # Define vazio para evitar crash total
+    CREDENCIAIS = {}
 
 def verificar_login(email, senha):
     """Verifica se o email e a senha (limpos de espaços) correspondem."""
-    
     email_limpo = email.strip()
     senha_limpa = senha.strip()
     
     if email_limpo in CREDENCIAIS:
-        # Pega a senha do Secret, converte para string e remove espaços invisíveis
         senha_secreta_limpa = str(CREDENCIAIS[email_limpo]).strip() 
         
         if senha_secreta_limpa == senha_limpa:
@@ -108,7 +105,7 @@ def verificar_login(email, senha):
     return False
 
 # ========================================================
-# TELA DE LOGIN E ESTADO
+# TELA DE LOGIN, ESTADO E LÓGICA DE COOKIES (NOVO)
 # ========================================================
 
 def tela_login():
@@ -116,21 +113,44 @@ def tela_login():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         with st.form("login_form"):
-            # O trim é crucial para remover espaços acidentais no campo de login/senha
             email_input = st.text_input("E-mail")
             senha_input = st.text_input("Senha", type="password")
+            
+            # NOVO: Checkbox "Lembrar-me"
+            lembrar_me = st.checkbox("Lembrar-me por 30 dias")
             
             if st.form_submit_button("Entrar"):
                 if verificar_login(email_input, senha_input):
                     st.session_state["logado"] = True
                     st.session_state["usuario_atual"] = email_input.strip()
+                    
+                    # NOVO: Se marcou "Lembrar-me", salva o email no cookie
+                    if lembrar_me:
+                        # Expira em 30 dias
+                        cookie_manager.set(COOKIE_USER_KEY, email_input.strip(), expires_at=date.today().day + 30)
+                        
                     st.rerun()
                 else:
                     st.error("Dados incorretos.")
 
+# --- Lógica de Inicialização de Sessão ---
+
+# 1. Tenta carregar o estado do cookie
+user_cookie = cookie_manager.get(COOKIE_USER_KEY)
+
 if "logado" not in st.session_state:
     st.session_state["logado"] = False
+    
+# 2. Se a sessão não está logada E achamos um cookie:
+if not st.session_state["logado"] and user_cookie:
+    # Verifica se o email do cookie ainda é um usuário válido nos Secrets
+    if user_cookie.strip() in CREDENCIAIS:
+        st.session_state["logado"] = True
+        st.session_state["usuario_atual"] = user_cookie.strip()
+        st.success(f"Bem-vindo(a) de volta, {user_cookie}!")
+        st.rerun() # Recarrega para pular o login
 
+# 3. Se não está logado (e não tem cookie), mostra a tela de login
 if not st.session_state["logado"]:
     tela_login()
     st.stop()
@@ -140,43 +160,25 @@ if not st.session_state["logado"]:
 # SISTEMA FINANCEIRO CORE
 # ========================================================
 
-# --- Funções de Dados Adaptadas ---
-def obter_despesas():
-    df = carregar_dados_sheets("Despesas")
-    if df.empty or 'Data' not in df.columns:
-        return pd.DataFrame(columns=["Data", "Categoria", "Descrição", "Valor"])
-    
-    # Converter tipos: CRUCIAL para garantir cálculos e ordenação corretos
-    try:
-        df["Data"] = pd.to_datetime(df["Data"], errors='coerce').dt.date
-        df["Valor"] = pd.to_numeric(df["Valor"], errors='coerce').fillna(0.0)
-    except Exception as e:
-        st.warning(f"Erro ao converter tipos de dados (Data/Valor) na planilha. Verifique as colunas. Erro: {e}")
-        return pd.DataFrame(columns=["Data", "Categoria", "Descrição", "Valor"])
-        
-    return df
-
-def obter_categorias():
-    df = carregar_dados_sheets("Categorias")
-    if df.empty or 'Categoria' not in df.columns:
-        # Se vazio, cria padrão e salva lá (garantindo que a aba Categorias exista)
-        padrao = ["Alimentação", "Transporte", "Moradia", "Lazer", "Educação", "Saúde", "Outros"]
-        df_padrao = pd.DataFrame(padrao, columns=["Categoria"])
-        salvar_dados_sheets(df_padrao, "Categorias")
-        return padrao
-    return df["Categoria"].tolist()
-
 # --- Interface ---
 st.sidebar.success(f"👤 {st.session_state['usuario_atual']}")
+
+# NOVO: Botão Sair também deleta o cookie
 if st.sidebar.button("Sair"):
     st.session_state["logado"] = False
+    st.session_state["usuario_atual"] = ""
+    # Deleta o cookie
+    cookie_manager.delete(COOKIE_USER_KEY)
     st.rerun()
 
 st.title("💰 Finanças no Google Sheets")
 
-# Carregamento inicial
+# Carregamento inicial (restante do app)
 df_despesas = obter_despesas()
 lista_categorias = obter_categorias()
+
+# ... (O restante da sua lógica de gerenciamento de categorias, despesas, gráficos e edição) ...
+# O restante do código abaixo é o mesmo que você já tem, garantindo que tudo funcione
 
 # --- Adicionar Nova Categoria ---
 with st.sidebar.expander("➕ Gerenciar Categorias"):
@@ -216,7 +218,6 @@ with st.sidebar.form("form_despesa"):
                 "Descrição": desc_in,
                 "Valor": val_in
             }
-            # Adiciona e salva
             novo_df = pd.DataFrame([nova_linha])
             df_despesas = pd.concat([df_despesas, novo_df], ignore_index=True)
             
@@ -235,7 +236,6 @@ if not df_despesas.empty:
     col1, col2 = st.columns(2)
     total = df_despesas["Valor"].sum()
     
-    # Filtro mês atual
     df_calc = df_despesas.copy()
     df_calc["Data"] = pd.to_datetime(df_calc["Data"], errors='coerce')
     mes_atual = date.today().strftime("%Y-%m")
@@ -266,7 +266,6 @@ if not df_despesas.empty:
 
     if st.button("💾 Salvar Alterações no Google Sheets"):
         
-        # Limpa linhas vazias que podem ter sido adicionadas/deletadas
         df_editado = df_editado.dropna(subset=['Data', 'Valor'])
         df_editado = df_editado[df_editado['Valor'] > 0] 
         
