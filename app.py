@@ -179,7 +179,7 @@ if st.sidebar.button("Sair"):
     # Removida a lógica de deletar cookie
     st.rerun()
 
-st.title("💰 Finanças no Google Sheets")
+st.title("💰 Controle de gastos")
 
 # Carregamento inicial (após login)
 df_despesas = obter_despesas()
