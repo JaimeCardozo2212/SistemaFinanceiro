@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import date, timedelta # Corrigido: timedelta adicionado aqui
+from datetime import date, timedelta, datetime # Importe o objeto datetime
 import os
 import json
 from streamlit_cookies import CookieManager 
@@ -147,12 +147,17 @@ def tela_login():
             
             if st.form_submit_button("Entrar"):
                 if verificar_login(email_input, senha_input):
-                    st.session_state["logado"] = True
-                    st.session_state["usuario_atual"] = email_input.strip()
+                    # ... (código de login bem-sucedido) ...
                     
                     if lembrar_me:
-                        data_expiracao = date.today() + timedelta(days=30)
-                        cookie_manager.set(COOKIE_USER_KEY, email_input.strip(), expires_at=data_expiracao)
+                        # 1. Calcula a data de hoje + 30 dias (data pura)
+                        data_limite_date = date.today() + timedelta(days=30)
+                        
+                        # 2. CONVERTE A DATA PURA PARA DATETIME (com hora zero)
+                        data_expiracao_datetime = datetime.combine(data_limite_date, datetime.min.time())
+                        
+                        # 3. Usa o objeto datetime completo para o cookie
+                        cookie_manager.set(COOKIE_USER_KEY, email_input.strip(), expires_at=data_expiracao_datetime)
                         
                     st.rerun()
                 else:
